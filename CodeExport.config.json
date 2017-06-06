@@ -1,0 +1,16 @@
+{
+   "VBAProject Name": "SalesReports",
+    "Base Path": "src",	
+	"Module Paths": {
+		"SalesReports": "SalesReports.bas"
+	},
+	"References": [
+		{
+			"Name": "Scripting",
+			"Description": "Microsoft Scripting Runtime",
+			"GUID": "{420B2830-E718-11CF-893D-00A0C9054228}",
+			"Major": 1,
+			"Minor": 0
+		}
+	]
+}
