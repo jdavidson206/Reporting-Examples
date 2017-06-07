@@ -37,9 +37,11 @@ Public Const ORDIDCOL As Integer = 1            ' order id column; same column o
 Public Const ORDDTCOL As Integer = 2            ' order date column
 Public Const MPRODCOL As Integer = 8            ' product name column on Macro worksheet
 Public Const ORDQTYCOL As Integer = 9           ' order quantity column on Macro worksheet
+Public Const UPRICECOL As Integer = 10          ' unit price column on Macro worksheet
 Public Const SHIPCOSTCOL As Integer = 18        ' shipping cost column on Macro worksheet
 Public Const SHIPMODECOL As Integer = 20        ' shipping mode column on Macro worksheet
 Public Const SHIPDTCOL As Integer = 21          ' shipping date column on Macro worksheet
+Public Const TOTBLCOL As Integer = 23           ' total billed column on Macro worksheet
 Public Const MCURRBASECOL As Integer = 24       ' current base margin column on Macro worksheet
 Public Const MGRCOL As Integer = 25             ' manager column
 Public Const RETURNSCOL As Integer = 27         ' scratch column for holding returns order ids
@@ -93,9 +95,9 @@ Sub AcceptChanges()
 Application.ScreenUpdating = False
 Application.Calculation = xlCalculationManual
 
-Dim BcWksht As Worksheet
-Dim MWksht As Worksheet
-Dim PvtTbl As PivotTable
+Dim BcWksht As Worksheet                ' BaseCheck worksheet object
+Dim MWksht As Worksheet                 ' Macro worksheet object
+Dim PvtTbl As PivotTable                ' pivot table object for updating
 
     ' sort the Macro and BaseCheck worksheets in Product Sub-category
     ' and Order ID order
@@ -103,7 +105,7 @@ Dim PvtTbl As PivotTable
     Call SortBaseCheckWksht
     
     Set BcWksht = ThisWorkbook.Worksheets("BaseCheck")
-    Set MWksht = ThisWorkbook.Worksheets("Sheet14")
+    Set MWksht = ThisWorkbook.Worksheets("Macro")
     
     ' copy New Base Margin from the BaseCheck to the Macro worksheet
         BcWksht.Select
@@ -149,7 +151,7 @@ Application.Calculation = xlCalculationManual
 Dim SuppRev As Worksheet                ' define SuppRev worksheet object
 Dim PivotWs As Worksheet                ' define support revenue pivot table worksheet object
 Dim PTSuppBase As PivotTable            ' define support revenue pivot table object
-Dim PvtTbl As PivotTable                ' define pivot table object for updates
+Dim PvtTbl As PivotTable                ' define pivot table object
 
 Dim i As Long                           ' for loop counter
 Dim j As Long                           ' for loop counter
@@ -223,8 +225,10 @@ Dim GrandTotal As Double                ' grand total calculated variable
     Cells(FirstRow, CUSTCOL).Select
     
     ' Update Pivot Tables
-    Set PvtTbl = ActiveSheet.PivotTables("SuppRev")
-    PvtTbl.RefreshTable
+    Worksheets("PT SuppRev").Select
+    ActiveSheet.PivotTables("PTSuppRev").PivotCache.Refresh
+    
+    'PvtTbl.RefreshTable
         
 Application.ScreenUpdating = True
 Application.Calculation = xlCalculationAutomatic
@@ -237,15 +241,15 @@ End Sub
 '==================================================================================================
 Sub CheckRate()
 
-Dim MarginDict As New Scripting.Dictionary      'create dictionary object to store lowest margin by product
-Dim PvtTbl As PivotTable
+Application.ScreenUpdating = False
+Application.Calculation = xlCalculationManual
+
+Dim MarginDict As New Scripting.Dictionary      'create dictionary object
+Dim PvtTbl As PivotTable                        'pivot table object for updating
 Dim i As Integer                                'for loop counter
 Dim j As Integer                                'for loop counter
 Dim MinRate As Double                           'stores rate
 Dim Prod As String                              'stores prod name
-
-Application.ScreenUpdating = False
-Application.Calculation = xlCalculationManual
 
     'find number of rows
     LastRow = CountRows(BcWksht, ORDIDCOL)
@@ -264,13 +268,13 @@ Application.Calculation = xlCalculationManual
 
     ' compare lowest base margin to current base margin by product, enters lowest base margin
     ' in the NewBaseMargin column; highlights the cell light blue
-    For i = FirstRow To ProdData.Rows.Count
+    For i = FirstRow To LastRow
         Prod = Cells(i, NPRODCOL)
         MinRate = Cells(i, NCURRBASECOL)
        If MarginDict.Exists(Prod) Then
            If MarginDict(Prod) < MinRate Then
                Cells(i, NEWBASECOL) = MarginDict(Prod)
-               Cells(i, NORDIDCOL).Select
+               Cells(i, ORDIDCOL).Select
                Range(Selection, Selection.End(xlToRight)).Select
                Selection.Interior.ColorIndex = 20
            ElseIf MarginDict(Prod) = MinRate Then
@@ -354,10 +358,10 @@ End Sub
 
 Function CountRows(CountSheet As Worksheet, CountCol As Integer) As Long
 
-Dim RowNbr As Long
-
 Application.ScreenUpdating = False
 Application.Calculation = xlCalculationManual
+
+Dim RowNbr As Long
 
     CountSheet.Select
     
@@ -378,16 +382,16 @@ End Function
 
 Sub FindReturns()
 
-Dim RetWksht As Worksheet
-Dim OrdID As Range
-Dim FoundAddr As Range
-Dim LastAddr As Range
-Dim PvtTbl As PivotTable
-Dim FirstAddr As String
-Dim i As Long
-
 Application.ScreenUpdating = False
 Application.Calculation = xlCalculationManual
+
+Dim RetWksht As Worksheet           'define Returns worksheet object
+Dim OrdID As Range                  'define Order ID column as range
+Dim FoundAddr As Range              'define Found Address as range
+Dim LastAddr As Range               'define Last Address as range
+Dim PvtTbl As PivotTable            'define pivot table object
+Dim FirstAddr As String             'define first found address
+Dim i As Long                       'for loop counter
 
     Set MWksht = ThisWorkbook.Worksheets("Macro")
     Set RetWksht = ThisWorkbook.Worksheets("Returns")
@@ -396,6 +400,7 @@ Application.Calculation = xlCalculationManual
     
     RwLastRow = CountRows(RetWksht, RETCOL)
     
+    'copy returned order IDs from Returns to Macro worksheet
     Range(Cells(FirstRow, RETCOL), Cells(FirstRow, RETCOL)).Select
     Range(Selection, Selection.End(xlDown)).Select
     Selection.Copy
@@ -412,7 +417,6 @@ Application.Calculation = xlCalculationManual
     
     With OrdID
         Set LastAddr = .Cells(.Cells.Count)
-        Debug.Print "LastAddr = " & LastAddr.Rows.Count
     End With
     
     For i = FirstRow To RLastRow
@@ -422,23 +426,44 @@ Application.Calculation = xlCalculationManual
         If Not FoundAddr Is Nothing Then
             FirstAddr = FoundAddr.Address
         End If
+        
         Do Until FoundAddr Is Nothing
+        
             'format returned orders and adjust amounts
             'makes the order quantity negative, so the calcs will perform correctly and be negative amounts
             Cells(FoundAddr.Row, ORDQTYCOL) = Cells(FoundAddr.Row, ORDQTYCOL) * -1
+            
             'remove shipping cost, change ship mode to "Returned", and ship date to order date
             Cells(FoundAddr.Row, SHIPCOSTCOL) = 0
             Cells(FoundAddr.Row, SHIPMODECOL) = "Returned"
             Cells(FoundAddr.Row, SHIPDTCOL) = Cells(FoundAddr.Row, ORDDTCOL)
             Range(Cells(FoundAddr.Row, ORDIDCOL), Cells(FoundAddr.Row, ORDIDCOL)).Select
+            
             'change font color to red
             Range(Selection, Selection.End(xlToRight)).Select
             With Selection.Font
                 .Color = -16776961 'red
                 .TintAndShade = 0
             End With
+            
+            'format order qty col
+            Range(Cells(FirstRow, ORDQTYCOL), Cells(FirstRow, ORDQTYCOL)).Select
+            Range(Selection, Selection.End(xlDown)).Select
+            Selection.NumberFormat = "#,##0_);[Red](#,##0)"
+
+            'format dollar columns
+            Range(Cells(FoundAddr.Row, UPRICECOL), Cells(FoundAddr.Row, SHIPCOSTCOL)).Select
+            Range(Selection, Selection.End(xlDown)).Select
+            Selection.NumberFormat = "#,##0.00_);[Red](#,##0.00)"
+            
+            'format total billed col
+            Range(Cells(FoundAddr.Row, TOTBLCOL), Cells(FoundAddr.Row, TOTBLCOL)).Select
+            Range(Selection, Selection.End(xlDown)).Select
+            Selection.NumberFormat = "#,##0.00_);[Red](#,##0.00)"
+
             'find next returned order id
             Set FoundAddr = OrdID.FindNext(FoundAddr) '(Cells(i, RETURNSCOL), lookat:=xlWhole, after:=LastAddr)
+            
             'if this address already found, look for next one
             If FoundAddr.Address = FirstAddr Then
                 Exit Do
@@ -450,6 +475,9 @@ Application.Calculation = xlCalculationManual
     For Each PvtTbl In ActiveWorkbook.PivotTables
         PvtTbl.RefreshTable
     Next
+    
+    ' Call Save workbook
+    Call SaveWorkbook
 
 Application.ScreenUpdating = True
 Application.Calculation = xlCalculationAutomatic
@@ -463,13 +491,13 @@ Sub NewWorksheet()
 Application.ScreenUpdating = False
 Application.Calculation = xlCalculationManual
 
-'Create new worksheet named 'BaseCheck' and check if exists
+    'Create new worksheet named 'BaseCheck' and check if exists
     On Error Resume Next
     Set BcWksht = ThisWorkbook.Worksheets("BaseCheck")
     
     On Error GoTo 0
     If Not BcWksht Is Nothing Then
-        MsgBox "Worksheet exists. Please delete and retry macro."
+        MsgBox "BaseCheck worksheet exists. Please delete the BaseCheck worksheet and rerun the macro."
         End
     Else
         Sheets.Add.Name = "BaseCheck"
@@ -479,11 +507,14 @@ Application.Calculation = xlCalculationManual
     'Add a button to the worksheet to approve the changes
     BcWksht.Select
 
-    'button add and location of add
-    ActiveSheet.Buttons.Add(160, 0.666666666666667, 89, 23.6666666666667).Select 'left,top,witdth,height
-    Selection.OnAction = "AcceptChanges"           'name of macro to run when button pressed
+    'button add and location of add; parameters = left, top, width, height
+    ActiveSheet.Buttons.Add(160, 0.666666666666667, 89, 23.6666666666667).Select
     
-    Selection.Characters.Text = "Accept Changes"   'button text
+    'name of macro to run when button pressed
+    Selection.OnAction = "AcceptChanges"
+    
+    'button text
+    Selection.Characters.Text = "Accept Changes"
     
     With Selection.Font
         .Name = "MS Sans Serif"
@@ -530,12 +561,14 @@ End Sub
 
 Sub SaveWorkbook()
 
-Dim WkbkName As String
-Dim sFileSaveName As Variant
+Dim WkbkName As String              'define workbook object
+Dim sFileSaveName As Variant        'define file save as name
 
     WkbkName = ActiveWorkbook.Name
+    
     ' calls Save As dialog box
     sFileSaveName = Application.GetSaveAsFilename(InitialFileName:=WkbkName, fileFilter:="Excel Files (*.xlsm), *.xlsm")
+    
     If sFileSaveName <> False Then
         ActiveWorkbook.SaveAs sFileSaveName
     End If
@@ -621,14 +654,14 @@ End Sub
 
 Sub ValidateMargin()
 
-Application.Workbooks("SampleReports").Activate     ' activate workbook
-
 Application.ScreenUpdating = False                  ' turn off update display
 Application.Calculation = xlCalculationManual       ' turn off auto calculation
 
+'Application.Workbooks("SampleReports").Activate     ' activate workbook
+
     Set MWksht = ThisWorkbook.Worksheets("Macro")   ' set MWksht = Macro worksheet
-    LastRow = CountRows(MWksht, ORDIDCOL)           ' count number of rows of data on Macro worksheet
-    Call NewWorksheet                               ' Insert new worksheet
+    LastRow = CountRows(MWksht, ORDIDCOL)           ' count number of rows of data
+    Call NewWorksheet                               ' insert new worksheet
     Call CopyData                                   ' copy data from Macro to BaseCheck worksheet
     Call CheckRate                                  ' check base margin rates
 
