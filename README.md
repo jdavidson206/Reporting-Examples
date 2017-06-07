@@ -2,10 +2,13 @@
 ## Example of Excel Macros and Pivot Tables
 
 This site contains examples of Excel workbooks that use VBA Macros and Pivot Tables to generate reports.  
+
 The main workbook, SampleReports.xlsm can be downloaded here:
 
+https://github.com/jdavidson206/Reporting-Examples/blob/master/SampleReports.xlsm
 
 The Macro code can be separately viewed here:
+https://github.com/jdavidson206/Reporting-Examples/blob/master/src/SalesReports.bas
 
 
 The following comments apply to the SampleReports workbook and its functionality.  The "Introduction" worksheet in the workbook contains detailed documentation on the worksheets and their functionality.
